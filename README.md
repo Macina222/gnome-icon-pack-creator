@@ -9,6 +9,8 @@ Natywna aplikacja graficzna (**GTK 4**) dla systemów Linux (GNOME oraz środowi
 
 Zamiast ręcznie tworzyć strukturę katalogów `scalable/*`, pisać plik `index.theme` i odświeżać pamięć podręczną ikon, GIPC pozwala wizualnie przypisać własne pliki wektorowe do nazw systemowych oraz ikon zainstalowanych aplikacji.
 
+Podgląd głównego okna GIPC (v0.1.0):
+
 ![Podgląd głównego okna GIPC](docs/main_window.png)
 ![Podgląd głównego okna GIPC](docs/main_window_with_icon.png)
 
