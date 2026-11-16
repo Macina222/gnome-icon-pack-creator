@@ -1,4 +1,5 @@
 import logging
+import configparser
 from pathlib import Path
 from src.config import CONTEXTS, SYSTEM_ICONS_DIR
 
@@ -57,6 +58,47 @@ def scan_system_icons(theme_name: str = "Adwaita", base_icons_dir: Path = SYSTEM
 
     logger.debug(f"scan_system_icons_done: theme={theme_name}")
     return icon_db
+
+def scan_available_themes(icons_dirs: list[Path] | None = None) -> list[str]:
+    """Skanuje katalogi systemowe w poszukiwaniu zainstalowanych motywów ikon."""
+    logger.debug("scan_available_themes_start")
+    if icons_dirs is None:
+        icons_dirs = [SYSTEM_ICONS_DIR]
+
+    themes: set[str] = set()
+    for base_dir in icons_dirs:
+        if not base_dir.exists() or not base_dir.is_dir():
+            logger.debug(f"scan_available_themes_dir_not_found: {base_dir}")
+            continue
+
+        for entry in base_dir.iterdir():
+            if not entry.is_dir() or entry.name.startswith("."):
+                continue
+
+            index_file = entry / "index.theme"
+            if not index_file.is_file():
+                continue
+
+            config = configparser.ConfigParser()
+            config.optionxform = str
+            try:
+                config.read(index_file, encoding="utf-8")
+            except (configparser.Error, OSError) as err:
+                logger.warning(f"scan_available_themes_error: {index_file} -> {err}")
+                continue
+
+            if "Icon Theme" not in config:
+                continue
+
+            theme_section = config["Icon Theme"]
+            if (entry / "cursors").is_dir() and not theme_section.get("Directories", "").strip():
+                continue
+
+            themes.add(entry.name)
+
+    sorted_themes = sorted(themes, key=str.casefold)
+    logger.debug(f"scan_available_themes_done: found={len(sorted_themes)}")
+    return sorted_themes
 
 if __name__ == "__main__":
     print(scan_installed_apps())

@@ -89,7 +89,9 @@ python -m unittest discover -s tests -v
 ## Plan rozwoju (Roadmap)
 
 - [x] Tłumaczenie aplikacji i wybór języka `PL / EN`
-- [ ] Wybór motywu dziedziczonego (`Inherits`) z listy motywów zainstalowanych w `/usr/share/icons`.
+- [x] Wybór motywu dziedziczonego (`Inherits`) z listy motywów zainstalowanych w `/usr/share/icons`.
+- [ ] Przeglądarka wszystkich ikon dostępnych na urządzeniu (z możliwością sortowania, wyszukiwania i oznaczania jako ulubione)
+- [ ] Usprawnienie sortowania dostępnych ikon systemowych do zastąpienia
 - [ ] Obsługa aliasów: tworzenie dowiązań symbolicznych (`symlink`) dla wielu nazw systemowych wskazujących na ten sam plik `.svg`.
 - [ ] Automatyczna konwersja ikon na wariant symboliczny (`-symbolic.svg` z atrybutem `currentColor`) dla górnego paska GNOME Shell.
 - [ ] Pakietowanie dla AUR (Arch/CachyOS) oraz Flatpak.

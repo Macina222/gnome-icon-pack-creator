@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.core.scanner import scan_installed_apps, scan_system_icons
+from src.core.scanner import scan_installed_apps, scan_system_icons, scan_available_themes
 
 
 class TestScanner(unittest.TestCase):
@@ -69,6 +69,36 @@ class TestScanner(unittest.TestCase):
         self.assertNotIn("apps", icons)
         self.assertEqual(icons["places"], set())
 
+    def test_scan_available_themes(self):
+        papirus = self.base_path / "Papirus-Dark"
+        papirus.mkdir()
+        (papirus / "index.theme").write_text(
+            "[Icon Theme]\nName=Papirus Dark\nDirectories=48x48/apps\n",
+            encoding="utf-8",
+        )
+
+        adwaita = self.base_path / "Adwaita"
+        adwaita.mkdir()
+        (adwaita / "index.theme").write_text(
+            "[Icon Theme]\nName=Adwaita\nDirectories=scalable/apps\n",
+            encoding="utf-8",
+        )
+
+        cursors_only = self.base_path / "Bibata-Cursors"
+        (cursors_only / "cursors").mkdir(parents=True)
+        (cursors_only / "index.theme").write_text(
+            "[Icon Theme]\nName=Bibata Cursors\n",
+            encoding="utf-8",
+        )
+
+        (self.base_path / "not-a-theme").mkdir()
+
+        broken = self.base_path / "BrokenTheme"
+        broken.mkdir()
+        (broken / "index.theme").write_text("invalid-ini-without-section", encoding="utf-8")
+
+        result = scan_available_themes(icons_dirs=[self.base_path, self.base_path / "missing"])
+        self.assertEqual(result, ["Adwaita", "Papirus-Dark"])
 
 if __name__ == "__main__":
     unittest.main()

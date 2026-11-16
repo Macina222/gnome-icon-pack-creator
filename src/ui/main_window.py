@@ -29,6 +29,7 @@ from src.core.project import (
 )
 from src.core.icon_database import IconDatabase
 from src.i18n import get_language, set_language, t
+from src.core.scanner import scan_available_themes
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -244,6 +245,13 @@ class MainWindow(Gtk.ApplicationWindow):
         self.suggestions_map: dict[str, list[str]] = {ctx: [] for ctx in CONTEXTS}
         self._scanning_dialog: Gtk.Window | None = None
         self._ui_ready: bool = False
+        self.icon_db: IconDatabase | None = None
+        self.suggestions_map: dict[str, list[str]] = {ctx: [] for ctx in CONTEXTS}
+        self._available_themes: list[str] = []
+        self._current_project_dir: Path | None = None
+        self._updating_inherits_ui: bool = False
+        self._scanning_dialog: Gtk.Window | None = None
+        self._ui_ready: bool = False
 
         self._setup_header_bar()
         self._setup_layout()
@@ -309,17 +317,25 @@ class MainWindow(Gtk.ApplicationWindow):
             icon_db = IconDatabase(fallback_theme="Adwaita")
             icon_db.build_database()
             new_map = {ctx: icon_db.get_suggestions(ctx) for ctx in CONTEXTS}
+            available_themes = scan_available_themes()
         except Exception as err:
             logger.exception(f"thread_database_scan_failed: {err}")
             GLib.idle_add(self._on_database_load_failed, str(err))
             return
 
-        GLib.idle_add(self._on_database_loaded, icon_db, new_map)
+        GLib.idle_add(self._on_database_loaded, icon_db, new_map, available_themes)
 
-    def _on_database_loaded(self, icon_db: IconDatabase, new_map: dict[str, list[str]]) -> bool:
+    def _on_database_loaded(
+        self,
+        icon_db: IconDatabase,
+        new_map: dict[str, list[str]],
+        available_themes: list[str],
+    ) -> bool:
         """Odbiera dane z wątku i aktualizuje interfejs (WYKONYWANE W GŁÓWNYM WĄTKU)."""
         self.icon_db = icon_db
         self.suggestions_map = new_map
+        self._available_themes = available_themes
+        self._populate_inherits_dropdown(available_themes)
 
         row = self.icons_listbox.get_first_child()
         while row is not None:
@@ -413,6 +429,21 @@ class MainWindow(Gtk.ApplicationWindow):
         left_panel.append(self.comment_label)
         left_panel.append(self.theme_comment_entry)
 
+        self.inherits_label = Gtk.Label(halign=Gtk.Align.START)
+        inherits_expression = Gtk.PropertyExpression.new(Gtk.StringObject, None, "string")
+        self.inherits_dropdown = Gtk.DropDown()
+        self.inherits_dropdown.set_expression(inherits_expression)
+        self.inherits_dropdown.set_enable_search(True)
+        self.inherits_dropdown.connect("notify::selected-item", self._on_inherits_dropdown_changed)
+
+        self.theme_inherits_entry = Gtk.Entry()
+        self.theme_inherits_entry.set_text(DEFAULT_INHERITS)
+        self.theme_inherits_entry.connect("changed", self._on_inherits_entry_changed)
+
+        left_panel.append(self.inherits_label)
+        left_panel.append(self.inherits_dropdown)
+        left_panel.append(self.theme_inherits_entry)
+
         main_box.append(left_panel)
 
         # Separator wizualny
@@ -495,6 +526,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self.theme_comment_entry.set_placeholder_text(t("settings.comment.placeholder"))
         self.theme_comment_entry.set_tooltip_text(t("settings.comment.tooltip"))
 
+        self.inherits_label.set_text(t("settings.inherits.label"))
+        self.inherits_dropdown.set_tooltip_text(t("settings.inherits.dropdown_tooltip"))
+        self.theme_inherits_entry.set_placeholder_text(t("settings.inherits.placeholder"))
+        self.theme_inherits_entry.set_tooltip_text(t("settings.inherits.tooltip"))
+
         self.icons_title.set_markup(
             f"<b>{GLib.markup_escape_text(t('icons.title'))}</b>"
         )
@@ -511,10 +547,11 @@ class MainWindow(Gtk.ApplicationWindow):
         # --- Obsługa zdarzeń ---
 
     def on_new_theme_clicked(self, button: Gtk.Button) -> None:
-        print("cleanup_new_theme_clicked")
         logger.debug("cleanup_new_theme_clicked")
+        self._current_project_dir = None
         self.theme_name_entry.set_text("")
         self.theme_comment_entry.set_text("")
+        self.theme_inherits_entry.set_text(DEFAULT_INHERITS)
         self._clear_icons_list()
 
     def _clear_icons_list(self):
@@ -526,7 +563,12 @@ class MainWindow(Gtk.ApplicationWindow):
         logger.debug("file_manager_load_theme_clicked")
         dialog = Gtk.FileDialog()
         dialog.set_title(t("dialog.load.title"))
-        dialog.set_initial_folder(Gio.File.new_for_path(str(DEFAULT_ICONS_DIR)))
+        initial_dir = (
+            self._current_project_dir.parent
+            if self._current_project_dir is not None
+            else DEFAULT_ICONS_DIR
+        )
+        dialog.set_initial_folder(Gio.File.new_for_path(str(initial_dir)))
         dialog.select_folder(self, None, self._on_theme_folder_selected)
 
     def _on_theme_folder_selected(self, dialog: Gtk.FileDialog, result: Gio.AsyncResult) -> None:
@@ -550,8 +592,10 @@ class MainWindow(Gtk.ApplicationWindow):
             return
 
         # Uzupełnienie formularza w lewym oknie
+        self._current_project_dir = project.path
         self.theme_name_entry.set_text(project.name)
         self.theme_comment_entry.set_text(project.comment)
+        self.theme_inherits_entry.set_text(project.inherits)
 
         # Wyczyszczenie listy svg w prawym oknie
         self._clear_icons_list()
@@ -598,6 +642,12 @@ class MainWindow(Gtk.ApplicationWindow):
         seen_targets: set[tuple[str, str]] = set()
         duplicates: list[str] = []
         incomplete_files: list[str] = []
+        inherits = self.theme_inherits_entry.get_text().strip() or DEFAULT_INHERITS
+        base_dir = (
+            self._current_project_dir.parent
+            if self._current_project_dir is not None
+            else DEFAULT_ICONS_DIR
+        )
 
         row = self.icons_listbox.get_first_child()
         while row is not None:
@@ -615,10 +665,10 @@ class MainWindow(Gtk.ApplicationWindow):
             row = row.get_next_sibling()
 
         project = ThemeProject(
-            path=DEFAULT_ICONS_DIR / slug,
+            path=base_dir / slug,
             name=name,
             comment=comment,
-            inherits=DEFAULT_INHERITS,
+            inherits=inherits,
             icons=icons,
         )
         return project, duplicates, incomplete_files
@@ -668,6 +718,7 @@ class MainWindow(Gtk.ApplicationWindow):
             )
             return
 
+        self._current_project_dir = project_dir
         logger.debug(f"build_theme_success: dir={project_dir} count={saved_count}")
         self._show_alert(
             t("alert.build_success.title"),
@@ -724,6 +775,45 @@ class MainWindow(Gtk.ApplicationWindow):
         )
         new_row.btn_remove.connect("clicked", lambda btn: self.icons_listbox.remove(new_row))
         self.icons_listbox.append(new_row)
+
+    def _populate_inherits_dropdown(self, themes: list[str]) -> None:
+        self._updating_inherits_ui = True
+        try:
+            self.inherits_dropdown.set_model(Gtk.StringList.new(themes))
+            self._sync_inherits_dropdown_from_entry()
+        finally:
+            self._updating_inherits_ui = False
+
+    def _sync_inherits_dropdown_from_entry(self) -> None:
+        if not self._available_themes:
+            return
+        raw_value = self.theme_inherits_entry.get_text().strip()
+        primary_theme = raw_value.split(",")[0].strip() if raw_value else ""
+        if primary_theme in self._available_themes:
+            idx = self._available_themes.index(primary_theme)
+            if self.inherits_dropdown.get_selected() != idx:
+                self.inherits_dropdown.set_selected(idx)
+
+    def _on_inherits_dropdown_changed(self, dropdown: Gtk.DropDown, pspec) -> None:
+        if self._updating_inherits_ui:
+            return
+        selected_item = dropdown.get_selected_item()
+        if not selected_item:
+            return
+        self._updating_inherits_ui = True
+        try:
+            self.theme_inherits_entry.set_text(selected_item.get_string())
+        finally:
+            self._updating_inherits_ui = False
+
+    def _on_inherits_entry_changed(self, entry: Gtk.Entry) -> None:
+        if self._updating_inherits_ui:
+            return
+        self._updating_inherits_ui = True
+        try:
+            self._sync_inherits_dropdown_from_entry()
+        finally:
+            self._updating_inherits_ui = False
 
 class IconBuilderApp(Gtk.Application):
     """Klasa aplikacji zarządzająca cyklem życia."""

@@ -45,5 +45,9 @@
   "alert.build_error.title": "Failed to build theme",
   "alert.build_error.detail": "An error occurred while writing files to disk:\n{err}",
   "alert.build_success.title": "Theme built successfully",
-  "alert.build_success.detail": "Saved theme '{name}' ({count} icons) to:\n{path}"
+  "alert.build_success.detail": "Saved theme '{name}' ({count} icons) to:\n{path}",
+  "settings.inherits.label": "Inherited theme (Inherits):",
+  "settings.inherits.dropdown_tooltip": "Select a base theme installed in /usr/share/icons",
+  "settings.inherits.placeholder": "e.g. hicolor,Adwaita",
+  "settings.inherits.tooltip": "Comma-separated fallback themes saved in the Inherits field of index.theme"
 }

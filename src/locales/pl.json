@@ -45,5 +45,9 @@
   "alert.build_error.title": "Nie udało się zbudować motywu",
   "alert.build_error.detail": "Wystąpił błąd podczas zapisu plików na dysk:\n{err}",
   "alert.build_success.title": "Motyw został zbudowany",
-  "alert.build_success.detail": "Zapisano motyw „{name}” ({count} ikon) w katalogu:\n{path}"
+  "alert.build_success.detail": "Zapisano motyw „{name}” ({count} ikon) w katalogu:\n{path}",
+  "settings.inherits.label": "Motyw dziedziczony (Inherits):",
+  "settings.inherits.dropdown_tooltip": "Wybierz motyw zainstalowany w /usr/share/icons jako bazowy",
+  "settings.inherits.placeholder": "Np. hicolor,Adwaita",
+  "settings.inherits.tooltip": "Lista motywów zapasowych (oddzielona przecinkami) zapisywana w polu Inherits pliku index.theme"
 }
