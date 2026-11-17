@@ -55,6 +55,7 @@ class IconRow(Gtk.ListBoxRow):
         self.filename = Path(filepath).name
         self.suggestions_map = suggestions_map
         self._pending_initial_name = initial_name
+        self.order_index: int = 0
 
         row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         row_box.set_margin_top(8)
@@ -213,6 +214,8 @@ class IconRow(Gtk.ListBoxRow):
         else:
             self.on_name_changed(self.name_dropdown, None)
 
+        self.changed()
+
     def on_name_changed(self, dropdown: Gtk.DropDown, pspec) -> None:
         """Odświeża miniaturę ikony systemowej na podstawie wybranej nazwy."""
         selected_item = dropdown.get_selected_item()
@@ -223,6 +226,8 @@ class IconRow(Gtk.ListBoxRow):
         else:
             logger.debug("IconRow name changed: none")
             self.target_preview.set_from_icon_name("image-missing")
+
+        self.changed()
 
     def get_selected_context(self) -> str:
         item = self.context_dropdown.get_selected_item()
@@ -250,6 +255,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._available_themes: list[str] = []
         self._current_project_dir: Path | None = None
         self._updating_inherits_ui: bool = False
+        self._next_icon_order_index: int = 0
         self._scanning_dialog: Gtk.Window | None = None
         self._ui_ready: bool = False
 
@@ -466,6 +472,20 @@ class MainWindow(Gtk.ApplicationWindow):
         header_box.append(self.add_icon_btn)
         right_panel.append(header_box)
 
+        # Pasek narzędziowy (wyszukiwarka + sortowanie)
+        toolbar_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        self.icons_search_entry = Gtk.SearchEntry()
+        self.icons_search_entry.set_hexpand(True)
+        self.icons_search_entry.connect("search-changed", self._on_icons_search_changed)
+        toolbar_box.append(self.icons_search_entry)
+
+        self.sort_dropdown = Gtk.DropDown()
+        self.sort_dropdown.connect("notify::selected", self._on_sort_selected_changed)
+        toolbar_box.append(self.sort_dropdown)
+
+        right_panel.append(toolbar_box)
+
         # Scrollowana lista dodanych ikon
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_vexpand(True)
@@ -473,6 +493,9 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self.icons_listbox = Gtk.ListBox()
         self.icons_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+
+        self.icons_listbox.set_filter_func(self._filter_icons)
+        self.icons_listbox.set_sort_func(self._sort_icons)
 
         self.placeholder_label = Gtk.Label()
         self.placeholder_label.set_justify(Gtk.Justification.CENTER)
@@ -482,6 +505,76 @@ class MainWindow(Gtk.ApplicationWindow):
         scrolled_window.set_child(self.icons_listbox)
         right_panel.append(scrolled_window)
         main_box.append(right_panel)
+
+    def _on_icons_search_changed(self, entry: Gtk.SearchEntry):
+        """Wywoływane przy wpisywaniu tekstu w wyszukiwarce"""
+        self.icons_listbox.invalidate_filter()
+
+    def _on_sort_selected_changed(self, dropdown: Gtk.DropDown, pspec):
+        """Wywolywane przy zmianie opcji w menu sortowania, wymusza ponowne sortowanie wierszy"""
+        self.icons_listbox.invalidate_sort()
+
+    def _filter_icons(self, row: Gtk.ListBoxRow, *args) -> bool:
+        """Sprawdza, czy dany wiersz spełnia kryteria wpisane w polu wyszukiwania"""
+        if not isinstance(row, IconRow):
+            return True
+        query = self.icons_search_entry.get_text().strip().lower()
+        if not query:
+            return True
+
+        target_name = row.get_selected_name().lower()
+        context = row.get_selected_context().lower()
+        filename = row.filename.lower()
+
+        return query in target_name or query in context or query in filename
+
+    def _sort_icons(self, row1: Gtk.ListBoxRow, row2: Gtk.ListBoxRow, *args) -> int:
+        """Sortuje ikony według wybranego filtra"""
+        if not isinstance(row1, IconRow) or not isinstance(row2, IconRow):
+            return 0
+
+        sort_mode = self.sort_dropdown.get_selected()
+
+        # 0: domyślna kolejność dodania
+        if sort_mode == 0:
+            if row1.order_index < row2.order_index:
+                return -1
+            elif row1.order_index > row2.order_index:
+                return 1
+            return 0
+
+        # 1: nazwa docelowa (A-Z)
+        elif sort_mode == 1:
+            val1 = row1.get_selected_name().lower()
+            val2 = row2.get_selected_name().lower()
+
+        # 2: Nazwa docelowa (Z-A)
+        elif sort_mode == 2:
+            val1 = row2.get_selected_name().lower()
+            val2 = row1.get_selected_name().lower()
+
+        # 3: Kontekst, a w ramach kontekstu nazwa ikony
+        elif sort_mode == 3:
+            ctx1 = row1.get_selected_context().lower()
+            ctx2 = row2.get_selected_context().lower()
+            if ctx1 != ctx2:
+                return -1 if ctx1 < ctx2 else 1
+            val1 = row1.get_selected_name().lower()
+            val2 = row2.get_selected_name().lower()
+
+        # 4: Nazwa pliku SVG (A-Z)
+        elif sort_mode == 4:
+            val1 = row1.filename.lower()
+            val2 = row2.filename.lower()
+
+        else:
+            return 0
+
+        if val1 < val2:
+            return -1
+        elif val1 > val2:
+            return 1
+        return 0
 
     def _on_language_toggled(self, button: Gtk.ToggleButton, lang: str) -> None:
         """Reaguje na przełączenie języka w pasku górnym i odświeża całe UI."""
@@ -538,6 +631,24 @@ class MainWindow(Gtk.ApplicationWindow):
         self.add_icon_btn.set_tooltip_text(t("icons.add.tooltip"))
         self.placeholder_label.set_text(t("icons.placeholder"))
 
+        self.icons_search_entry.set_placeholder_text(t("icons.search.placeholder"))
+        self.icons_search_entry.set_tooltip_text(t("icons.search.tooltip"))
+        self.sort_dropdown.set_tooltip_text(t("icons.sort.tooltip"))
+
+        current_sort_idx = self.sort_dropdown.get_selected()
+        sort_labels = [
+            t("icons.sort.default"),
+            t("icons.sort.name_asc"),
+            t("icons.sort.name_desc"),
+            t("icons.sort.context"),
+            t("icons.sort.filename_asc"),
+        ]
+        self.sort_dropdown.set_model(Gtk.StringList.new(sort_labels))
+        if current_sort_idx != Gtk.INVALID_LIST_POSITION:
+            self.sort_dropdown.set_selected(current_sort_idx)
+        else:
+            self.sort_dropdown.set_selected(0)
+
         row = self.icons_listbox.get_first_child()
         while row is not None:
             if isinstance(row, IconRow):
@@ -556,6 +667,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _clear_icons_list(self):
         """Usuwa wszystkie wiersze ikon po prawej stronie"""
+        self._next_icon_order_index = 0
         while (child := self.icons_listbox.get_first_child()) is not None:
             self.icons_listbox.remove(child)
 
@@ -603,6 +715,8 @@ class MainWindow(Gtk.ApplicationWindow):
         # Odtworzenie listy IconRow dla ikon z projektu
         for icon in project.icons:
             row = IconRow.from_loaded_icon(icon, self.suggestions_map)
+            row.order_index = self._next_icon_order_index
+            self._next_icon_order_index += 1
             row.btn_remove.connect("clicked", lambda btn, r=row: self.icons_listbox.remove(r))
             self.icons_listbox.append(row)
 
@@ -773,6 +887,8 @@ class MainWindow(Gtk.ApplicationWindow):
             filepath=str(valid_path),
             suggestions_map=self.suggestions_map,
         )
+        new_row.order_index = self._next_icon_order_index
+        self._next_icon_order_index += 1
         new_row.btn_remove.connect("clicked", lambda btn: self.icons_listbox.remove(new_row))
         self.icons_listbox.append(new_row)
 
