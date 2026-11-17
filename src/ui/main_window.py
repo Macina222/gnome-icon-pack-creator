@@ -30,6 +30,7 @@ from src.core.project import (
 from src.core.icon_database import IconDatabase
 from src.i18n import get_language, set_language, t
 from src.core.scanner import scan_available_themes
+from src.ui.icon_browser_dialog import IconBrowserDialog
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -64,6 +65,13 @@ class IconRow(Gtk.ListBoxRow):
         row_box.set_margin_end(10)
 
         # --- LEWA STRONA: IKONA SYSTEMOWA (CEL) ---
+        # Lupa przeglądarki ikon
+        self.btn_browse = Gtk.Button(icon_name="system-search-symbolic")
+        self.btn_browse.add_css_class("flat")
+        self.btn_browse.set_valign(Gtk.Align.CENTER)
+        self.btn_browse.connect("clicked", self._on_browse_clicked)
+        row_box.append(self.btn_browse)
+
         # 1. Wybór kontekstu (apps, status, places...)
         context_keys = list(self.suggestions_map.keys())
         self.context_dropdown = Gtk.DropDown(model=Gtk.StringList.new(context_keys))
@@ -81,7 +89,7 @@ class IconRow(Gtk.ListBoxRow):
         self.name_dropdown.connect("notify::selected-item", self.on_name_changed)
         row_box.append(self.name_dropdown)
 
-        # 3. Miniatura obecnej ikony z systemu
+        # 4. Miniatura obecnej ikony z systemu
         self.target_preview = Gtk.Image.new_from_icon_name("image-missing")
         self.target_preview.set_pixel_size(48)
         row_box.append(self.target_preview)
@@ -92,12 +100,12 @@ class IconRow(Gtk.ListBoxRow):
         row_box.append(arrow)
 
         # --- PRAWA STRONA: NOWA IKONA (Z PLIKU SVG) ---
-        # 4. Miniatura nowego pliku SVG z dysku
+        # 5. Miniatura nowego pliku SVG z dysku
         self.input_preview = Gtk.Image.new_from_file(self.filepath)
         self.input_preview.set_pixel_size(48)
         row_box.append(self.input_preview)
 
-        # 5. Nazwa dodanego pliku SVG
+        # 6. Nazwa dodanego pliku SVG
         self.filename_label = Gtk.Label(
             label=f"<b>{GLib.markup_escape_text(self.filename)}</b>",
             use_markup=True,
@@ -108,7 +116,7 @@ class IconRow(Gtk.ListBoxRow):
         self.filename_label.set_ellipsize(3)  # Pango.EllipsizeMode.END
         row_box.append(self.filename_label)
 
-        # 6. Przycisk usuwania wiersza
+        # 7. Przycisk usuwania wiersza
         self.btn_remove = Gtk.Button(icon_name="user-trash-symbolic")
         self.btn_remove.add_css_class("destructive-action")
         self.btn_remove.add_css_class("flat")
@@ -141,6 +149,7 @@ class IconRow(Gtk.ListBoxRow):
         self.input_preview.set_tooltip_text(t("row.input_preview.tooltip"))
         self.filename_label.set_tooltip_text(t("row.filename.tooltip", filepath=self.filepath))
         self.btn_remove.set_tooltip_text(t("row.remove.tooltip"))
+        self.btn_browse.set_tooltip_text(t("row.browse.tooltip"))
 
     @classmethod
     def from_loaded_icon(
@@ -236,6 +245,29 @@ class IconRow(Gtk.ListBoxRow):
     def get_selected_name(self) -> str:
         item = self.name_dropdown.get_selected_item()
         return item.get_string() if item else ""
+
+    def _on_browse_clicked(self, button: Gtk.Button) -> None:
+        """Otwiera okno przeglądarki ikon z bieżącym kontekstem."""
+        root_window = self.get_root()
+        dialog = IconBrowserDialog(
+            parent=root_window,
+            suggestions_map=self.suggestions_map,
+            initial_context=self.get_selected_context(),
+            on_icon_selected=self.set_icon_selection,
+        )
+        dialog.present()
+
+    def set_icon_selection(self, context: str, icon_name: str) -> None:
+        """Ustawia kontekst i nazwę ikony wybraną z okna przeglądarki."""
+        context_keys = list(self.suggestions_map.keys())
+        if context in context_keys:
+            self._pending_initial_name = icon_name
+            context_idx = context_keys.index(context)
+            if self.context_dropdown.get_selected() == context_idx:
+                # Jeśli kontekst jest ten sam, wymuszamy zaznaczenie nazwy
+                self.on_context_changed(self.context_dropdown, None)
+            else:
+                self.context_dropdown.set_selected(context_idx)
 
 
 class MainWindow(Gtk.ApplicationWindow):

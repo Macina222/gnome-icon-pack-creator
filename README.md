@@ -78,7 +78,8 @@ gnome-icon-pack-creator/
 │   │   ├── scanner.py         # Skaner plików .desktop oraz systemowych motywów ikon
 │   │   └── svg_handler.py     # Walidacja XML/SVG oraz zarządzanie plikami w scalable/
 │   └── ui/
-│       └── main_window.py     # Interfejs GTK 4, przełączanie języka i okna dialogowe
+│       ├── icon_browser_dialog.py # Modalna przeglądarka i selektor ikon (FlowBox, filtry, sortowanie)
+│       └── main_window.py     # Interfejs GTK 4, zarządzanie motywem i lista mapowań
 └── tests/                     # Testy jednostkowe warstwy core oraz i18n (unittest)
 ```
 
@@ -92,8 +93,8 @@ python -m unittest discover -s tests -v
 
 - [x] Tłumaczenie aplikacji i wybór języka `PL / EN`
 - [x] Wybór motywu dziedziczonego (`Inherits`) z listy motywów zainstalowanych w `/usr/share/icons`.
-- [ ] Przeglądarka wszystkich ikon dostępnych na urządzeniu (z możliwością sortowania, wyszukiwania i oznaczania jako ulubione)
-- [ ] Usprawnienie sortowania dostępnych ikon systemowych do zastąpienia
+- [x] Przeglądarka wszystkich ikon dostępnych na urządzeniu (z możliwością sortowania, wyszukiwania i oznaczania jako ulubione)
+- [x] Usprawnienie sortowania dostępnych ikon systemowych do zastąpienia
 - [ ] Obsługa aliasów: tworzenie dowiązań symbolicznych (`symlink`) dla wielu nazw systemowych wskazujących na ten sam plik `.svg`.
 - [ ] Automatyczna konwersja ikon na wariant symboliczny (`-symbolic.svg` z atrybutem `currentColor`) dla górnego paska GNOME Shell.
 - [ ] Pakietowanie dla AUR (Arch/CachyOS) oraz Flatpak.
